@@ -1,0 +1,118 @@
+# {{project_name}} — Agentic Task Board (worktree + PR edition)
+
+A file-based work queue for autonomous agents. One agent takes one task, implements it in an
+**isolated git worktree**, opens a **PR**, and stops. Nothing merges until *you* (the captain)
+approve. Independent tasks run **in parallel** — each claim gets its own branch + worktree.
+
+Roles: **captain** = the human (approves/rejects), **firstmate** = the main Claude Code
+session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claude/agents/`,
+**researcher** = drafts research briefs and backlog tasks, **reviewer** = read-only quality gate.
+
+---
+
+## Core ideas
+
+1. **A task is ONE file that never moves.** `tasks/phase-N/T-XXX.md`, with `status:` in its
+   frontmatter as the single source of truth:
+   `backlog → in-progress → in-review → changes-requested → done` (blocked is computed from deps).
+2. **Claiming is atomic via git.** `claim.sh` creates branch `task/<id>` — git ref creation is
+   atomic, so two agents claiming simultaneously get exactly one winner. No status database,
+   no file moves, no double-booking.
+3. **Worktrees give parallelism.** Each claim materializes `.worktrees/<id>` on its own branch.
+   Agents on independent tasks never touch each other's files.
+4. **The PR is the approval gate.** Agents commit *only on their task branch* and open a PR.
+   Merge happens only after your approval. On reject, the task goes to `changes-requested` —
+   **not** back to backlog — and the same owner resumes in the same worktree.
+5. **Contracts unlock parallelism.** When task B only needs task A's *interface*, don't chain
+   B on A. Create a small `kind: contract` task that writes the agreed interface (API shape,
+   schema, file format) to `docs/contracts/<name>.md`; both A and B depend on the contract,
+   run in parallel, and a later task may revise the contract if reality disagrees.
+
+## Classification
+
+| Field | Values | Purpose |
+|---|---|---|
+| `phase` (+ folder) | 0–N | build order |
+| `area` | {{areas_table}} | routes tasks to the right crew member (`./next.sh --area <area>`) |
+| `kind` | `feature` `chore` `milestone` `epic` `contract` | epics are decomposed, never implemented directly; contracts pin interfaces |
+| `depends_on` | task ids | a task is claimable only when all deps are `done` |
+
+---
+
+## Lifecycle
+
+```
+                 claim.sh (atomic branch+worktree)      submit.sh (push + PR)
+   backlog ────────────────────────► in-progress ────────────────────► in-review
+      ▲                                    ▲                              │
+      │ unclaim.sh (abandon)               │ resume in same worktree      │ human approves & merges PR,
+      │                                    │                              │ then approve.sh (sync+cleanup)
+      └───────────────                changes-requested ◄── reject.sh ────┤
+                                                                          ▼
+                                                                        done
+```
+
+## Agent protocol (follow exactly)
+
+1. `./next.sh [--area <area>]` — see what's claimable (or resumable).
+2. `./claim.sh <task-id> <your-agent-id>` — atomic claim; creates `.worktrees/<id>` on
+   branch `task/<id>`. On `CANNOT CLAIM`/`BLOCKED`, pick another. **Never work unclaimed.**
+3. `cd .worktrees/<id>` and implement **only inside the worktree**. Add code comments.
+   Commit on the task branch as you go (never on `main`, never push `main`).
+4. If `main` moved meanwhile: `git rebase main` in the worktree before submitting.
+5. `./submit.sh <task-id>` — commits leftovers, pushes, opens the PR (with `gh`), and flips
+   status to `in-review`. Then **stop and report**.
+6. If the human requests changes (status `changes-requested`): resume in the *same* worktree,
+   fix, and `./submit.sh` again — it updates the same PR.
+
+Token tip: if `graphify-out/` exists at the repo root, query the knowledge graph (graphify
+skill) to orient yourself before reading many files — it is far cheaper than broad exploration.
+
+## Human (captain) protocol
+
+- Review the PR on GitHub (or `git diff main...task/<id>` locally).
+- **Approve path:** approve & merge the PR on GitHub, then `./approve.sh <id>` — verifies the
+  merge, fast-forwards main, flips status to `done`, removes worktree + branch, commits the
+  board state. (No remote / offline: `./approve.sh <id> --local` reviews-then-merges locally.)
+- **Reject path:** `./reject.sh <id> "what to fix"` — status → `changes-requested`, reason
+  appended to the task file; owner and worktree are kept (NOT sent to backlog).
+- Stuck/abandoned claim: `./unclaim.sh <id> [--force]`.
+
+## Running crew in parallel
+
+Crew definitions live in `.claude/agents/`:
+
+{{personas_bullets}}
+- **researcher** — researches topics, writes briefs to `docs/research/`, drafts backlog tasks.
+- **reviewer** — read-only safety/quality gate; runs automatically on every `submit.sh`.
+
+Ways to run them:
+
+1. **Orchestrated (recommended):** in the main {{project_name}} Claude Code session
+   (the firstmate), say e.g. *"Run the next two ready tasks in parallel."* The firstmate
+   spawns the right crew subagents in the background, each claims its own task (atomically —
+   no collision), works in its own worktree, opens its PR, and reports back. The firstmate
+   monitors and relays; you just review the PRs.
+2. **Manual:** open terminals, run `claude` in each, and tell each one which crew member to
+   act as and which area to take.
+
+Because claims are atomic and worktrees are isolated, any number of agents can run
+concurrently; `depends_on` keeps truly dependent work sequential.
+
+## Scripts
+
+| Script | Who | Purpose |
+|---|---|---|
+| `next.sh [--area X]` | agent | claimable + resumable tasks |
+| `board.sh` | anyone | full board grouped by status |
+| `claim.sh <id> <agent>` | agent | atomic claim → branch + worktree |
+| `submit.sh <id> [--local]` | agent | commit, push, open PR, → in-review |
+| `approve.sh <id> [--local]` | human | after PR merge: sync main, cleanup, → done |
+| `reject.sh <id> "reason"` | human | → changes-requested (owner keeps task) |
+| `unclaim.sh <id> [--force]` | either | abandon a claim → backlog |
+
+> **GitHub note:** with a configured `origin` remote and the GitHub CLI (`brew install gh &&
+> gh auth login`), `submit.sh` opens PRs automatically. Without them, use `--local` mode:
+> `submit.sh <id> --local` and `approve.sh <id> --local`.
+
+> Installed by [Helm](https://github.com/payzli) — edit freely; `helm update` skips files you've changed.

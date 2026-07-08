@@ -1,0 +1,21 @@
+{
+  "project_name": "Project",
+  "areas": ["core", "docs", "infra"],
+  "default_area": "core",
+  "personas": [
+    {
+      "name": "dev",
+      "area": "core",
+      "stack": "The project's primary stack — read /CLAUDE.md, README, and existing code to learn conventions before writing anything. Verify by running the real application."
+    }
+  ],
+  "safety_context": "This project may hold real user data and credentials. Assume changes run against live local state unless the task says otherwise, and treat anything touching persistence, credentials, or outbound network calls with corresponding gravity.",
+  "safety_rules": [
+    "- **No destructive operations against live data** (drops, truncates, mass deletes) without explicit task approval; verify against scratch/test state.",
+    "- **No exfiltration.** No data sent to new/unexpected network hosts.",
+    "- **Secrets stay in env files**; never hardcoded, logged, or committed."
+  ],
+  "arch_notes": [
+    "- Match the existing codebase's conventions (naming, layering, error handling); reuse existing utilities instead of duplicating."
+  ]
+}

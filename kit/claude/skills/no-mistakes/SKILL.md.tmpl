@@ -1,0 +1,33 @@
+---
+name: no-mistakes
+description: Run the {{project_name}} reviewer safety gate on a set of changes before human PR review. Modeled on the no-mistakes pipeline. Invoke after finishing a task (before ./submit.sh), or to evaluate a PR, branch, or worktree — e.g. "/no-mistakes", "/no-mistakes T-102", "/no-mistakes PR 42". Kill the slop, raise a clean PR.
+---
+
+# no-mistakes — {{project_name}} change gate
+
+This skill runs {{project_name}}'s **reviewer** safety gate over a set of changes and relays the
+verdict. This gate exists to catch anything suspicious, unsafe, or sloppy *before* the human
+(the captain) looks at the PR.
+
+## What to do when invoked
+1. **Determine the review target** from the argument (if any):
+   - a task id like `T-102` → review its worktree `.worktrees/T-102` / branch `task/T-102`
+   - `PR <n>` or a branch name → review that
+   - **no argument** → review the current branch vs `main`
+2. **Launch the `reviewer` subagent** (via the Agent tool, `subagent_type: reviewer`) and hand it
+   the target. Let it scope the exact diff, run its pipeline (safety → correctness → docs → lint
+   → verify), and produce a verdict. Do not do the review yourself in the main thread — the whole
+   point is an independent read-only pass.
+3. **Relay the reviewer's report verbatim-ish**: the `BLOCK / CHANGES REQUESTED / APPROVE WITH
+   NITS / APPROVE` verdict and every finding (severity · `file:line` · why · fix · `[auto-fix]`
+   or `[needs-human]`).
+
+## Gate semantics
+- **BLOCK** ⇒ do **not** run `./submit.sh`. Surface the safety/correctness findings; the changes
+  must be fixed first.
+- **CHANGES REQUESTED** ⇒ address the findings before submitting.
+- **APPROVE / APPROVE WITH NITS** ⇒ clear to run `./submit.sh <id>` for human PR review.
+
+The reviewer is **read-only** — it never edits, commits, pushes, merges, or approves. Applying
+fixes and running `./submit.sh` stays with you / the original task agent, and the human PR
+approval gate remains the final word.

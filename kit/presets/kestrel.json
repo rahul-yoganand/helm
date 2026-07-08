@@ -1,0 +1,29 @@
+{
+  "project_name": "Kestrel",
+  "areas": ["backend", "frontend", "fullstack", "infra", "docs"],
+  "default_area": "backend",
+  "personas": [
+    {
+      "name": "backend-dev",
+      "area": "backend",
+      "stack": "Python 3.12, FastAPI, SQLAlchemy 2.0 + Alembic, Postgres (psycopg v3), deterministic quant math in backend/app/engines/ (the LLM never computes numbers). Verify by exercising real endpoints/CLI."
+    },
+    {
+      "name": "frontend-dev",
+      "area": "frontend",
+      "stack": "Flutter desktop (macOS), pure Bloc (flutter_bloc — Bloc only, NEVER Cubit), dio networking, go_router navigation; follow the features/health/ slice pattern. `flutter analyze` must be clean."
+    }
+  ],
+  "safety_context": "Kestrel is a personal AI investment-research agent wired to a REAL, LIVE Zerodha Kite account. The account is for research and read-only market data only. A single mistake here can leak credentials or touch real money. Treat every change with that gravity.",
+  "safety_rules": [
+    "- **No trading / account-mutating broker calls.** Kestrel is read-only: flag anything that places, modifies, or cancels orders/GTTs, transfers funds, or otherwise writes to the broker.",
+    "- **No data exfiltration.** No account data (holdings, positions, orders, PnL, tokens) sent to any third-party endpoint; outbound calls only to the known set (broker data, configured news/fundamentals sources, local Ollama).",
+    "- **LLM boundary.** Ollama does text only and never computes numbers; never feed it secrets or live account identifiers; its outputs must be pydantic-validated JSON.",
+    "- **Secrets live only in backend/.env**; never hardcoded, logged, in API responses, or committed."
+  ],
+  "arch_notes": [
+    "- **Backend layering:** api → engines/ingestion → storage; no business logic in the wrong layer; reuse utilities in backend/app/.",
+    "- **All finance math is deterministic Python** (Black-Scholes, factor regressions, risk) — never the LLM; check formulas, units, sign conventions, edge cases.",
+    "- **Frontend:** pure Bloc, event→state only, each state its own Equatable class, no business logic in the GUI."
+  ]
+}

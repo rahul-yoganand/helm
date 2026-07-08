@@ -1,0 +1,29 @@
+# Agentic workflow — captain / firstmate / crew (installed by Helm)
+
+{{project_name}} development runs on a file-based task board (`tasks/`). Read
+`tasks/README.md` for the full protocol. The short version:
+
+**Roles**
+- **Captain** — the human. Only the captain approves (`tasks/approve.sh`) or rejects
+  (`tasks/reject.sh`) submitted work. The PR (or a local diff review) is the approval gate.
+- **Firstmate** — YOU, the main Claude Code session, when the captain asks for board work.
+  You spawn crew subagents (in the background, in parallel when tasks are independent),
+  monitor them, relay results, and keep the captain informed. You do not implement board
+  tasks yourself and you never approve/merge work.
+- **Crew** — dev subagents in `.claude/agents/` ({{crew_names}}). Each claims ONE task
+  atomically (`tasks/claim.sh`), works only in its worktree (`.worktrees/<id>`), submits
+  (`tasks/submit.sh`), and stops.
+- **researcher** — researches features/improvements, writes briefs to `docs/research/`,
+  drafts backlog task files. Never implements.
+- **reviewer** — read-only no-mistakes gate; a PostToolUse hook triggers it automatically on
+  every `submit.sh`. BLOCK / CHANGES REQUESTED means the task is NOT done.
+
+**Board rules (everyone)**
+- A task is one file `tasks/phase-N/T-XXX.md`; its `status:` frontmatter is the source of
+  truth (`backlog → in-progress → in-review → changes-requested → done`).
+- Never work unclaimed; never commit to main; never merge/push main; never self-approve.
+- Keep `depends_on` liberal: when tasks only share an interface, depend on a small
+  `kind: contract` task (writes `docs/contracts/<name>.md`) instead of each other, so both
+  can run in parallel. Contracts may be revised later by follow-up tasks.
+- If `graphify-out/` exists at the repo root, query the knowledge graph (graphify skill)
+  before broad file exploration — it saves a lot of tokens.

@@ -1,0 +1,44 @@
+---
+id: T-XXX
+title: short imperative title
+phase: 0
+area: {{default_area}}             # {{areas_pipe}}
+kind: feature             # feature | chore | milestone | epic | contract
+status: backlog           # backlog | in-progress | in-review | changes-requested | done
+owner:                    # set by claim.sh
+depends_on: []            # e.g. [T-001, T-002] — all must be done before claiming
+created: {{today}}
+claimed_at:
+completed_at:
+approved_at:
+---
+
+## Goal
+One or two sentences: what this task delivers and why.
+
+## Acceptance criteria
+- [ ] concrete, checkable outcome
+- [ ] ...
+
+## Files to create / modify
+- `path/to/file` — what changes
+
+## How to verify
+Exact commands / UI steps to prove it works end-to-end (not just "tests pass").
+
+## Constraints
+- Work ONLY in your task worktree (`.worktrees/<id>`); commit on `task/<id>`, never on main.
+- Add clear code comments (see /CLAUDE.md). Reuse existing utilities; do not duplicate.
+- Merge happens via PR approval only — never merge or push main yourself.
+
+## Agent log
+<!-- The claiming agent appends progress notes here (via the main checkout). -->
+
+<!--
+Dependency tips:
+- Keep depends_on liberal. If B only needs A's *interface* (API shape, schema, file format),
+  don't depend on A itself — create a small `kind: contract` task that writes the agreed
+  interface to docs/contracts/<name>.md, and have BOTH A and B depend on the contract task.
+  A and B then run in parallel against the draft contract; the contract can be revised later
+  by a follow-up task.
+-->

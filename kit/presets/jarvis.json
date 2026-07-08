@@ -1,0 +1,35 @@
+{
+  "project_name": "Jarvis",
+  "areas": ["core", "voice", "db", "docs", "infra"],
+  "default_area": "core",
+  "personas": [
+    {
+      "name": "python-dev",
+      "area": "core",
+      "stack": "Python 3.9+ synchronous CLI (`jarvis/` package — assistant.py handler chain, cli.py argparse subcommands, llm.py provider Protocol). Style: `from __future__ import annotations`, frozen dataclasses for config, module-level regex triggers, stores wrapping a session_factory. Verify by running the real `jarvis` CLI (e.g. `python -m jarvis.cli chat`)."
+    },
+    {
+      "name": "voice-dev",
+      "area": "voice",
+      "stack": "The voice pipeline: jarvis/audio.py (sounddevice mic, macOS `say` + Kokoro TTS, openWakeWord, Silero VAD) and jarvis/stt.py (mlx-whisper adapter). All voice deps are optional extras (`[audio,stt,wake,vad]`) — code must degrade gracefully when they are missing. Verify with `jarvis record`/`jarvis transcribe`/`jarvis voice` where hardware allows."
+    },
+    {
+      "name": "db-dev",
+      "area": "db",
+      "stack": "SQLAlchemy 2.0 models in jarvis/db/models.py (Base in db/base.py), per-feature store modules, Alembic migrations in migrations/versions/. Every schema change ships a migration; verify `alembic upgrade head` AND `alembic downgrade -1` against a scratch database, never the live one."
+    }
+  ],
+  "safety_context": "Jarvis is a personal voice assistant holding the captain's REAL personal data in a live local Postgres database (facts, conversations, notes, tasks, ADHD/focus tracking, spaced-repetition cards). It also has microphone access and speaks aloud. A mistake here can destroy personal memory data or leak it. Treat every change touching jarvis/db/, migrations/, or audio capture with that gravity.",
+  "safety_rules": [
+    "- **Never touch the live Postgres data destructively.** No data-dropping migrations, no `DELETE`/`DROP`/`TRUNCATE` against the default `jarvis` database without explicit task approval; development/verification runs against a scratch database (e.g. `jarvis_test` via `JARVIS_DATABASE_URL`).",
+    "- **Migrations must be reversible.** Every Alembic revision has a working `downgrade()`.",
+    "- **No exfiltration of personal data.** Memory/notes/conversation content goes only to the configured LLM provider the user selected — never to any new/unexpected network host.",
+    "- **Secrets stay in env** (`ANTHROPIC_API_KEY` etc.); never hardcoded, logged, or committed."
+  ],
+  "arch_notes": [
+    "- **Stay synchronous.** Jarvis is a sync codebase; concurrency is `threading` only. No asyncio in `jarvis/`.",
+    "- **Respect the handler chain.** New conversational features hook in as `_maybe_handle_*` handlers in assistant.py, not ad-hoc branches elsewhere.",
+    "- **Providers behind the `LLM` Protocol** in jarvis/llm.py (hand-rolled urllib, no SDK deps in core). Optional features live behind extras with graceful ImportError fallbacks.",
+    "- **Stores own persistence.** DB access goes through the per-feature store modules wrapping `session_factory`, never raw sessions in handlers."
+  ]
+}
