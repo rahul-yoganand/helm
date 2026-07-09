@@ -35,7 +35,27 @@ session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claud
 | `phase` (+ folder) | 0–N | build order |
 | `area` | {{areas_table}} | routes tasks to the right crew member (`./next.sh --area <area>`) |
 | `kind` | `feature` `chore` `milestone` `epic` `contract` | epics are decomposed, never implemented directly; contracts pin interfaces |
+| `complexity` | `trivial` `standard` `complex` | effort estimate set at task creation; drives `model` |
+| `model` | `haiku` `sonnet` `opus` | Claude model the crew agent runs on (see Model routing) |
 | `depends_on` | task ids | a task is claimable only when all deps are `done` |
+
+## Model routing
+
+Whoever creates a task (researcher, firstmate decomposing an epic, or the captain) analyses
+its complexity and sets `complexity:` + `model:` in the frontmatter. The firstmate — which
+itself runs on a high model — reads `model:` when spawning the crew subagent for a task and
+passes it as the Agent-tool model override. High model orchestrates; work is delegated to
+the cheapest model that can do it well.
+
+| `complexity` | `model` | Use for |
+|---|---|---|
+| `trivial` | `haiku` | mechanical changes, no design decisions: renames, config tweaks, doc updates, copy changes, adding a field to an existing pattern |
+| `standard` | `sonnet` | typical single-area feature/chore with clear acceptance criteria — **the default when unsure** |
+| `complex` | `opus` | architectural or cross-cutting changes, ambiguous requirements, hard debugging, epic decomposition, contract design, security-sensitive work |
+
+Rules of thumb: vague acceptance criteria or >5 files touched bumps a task up one tier;
+a missing `model:` field means `sonnet`. The captain can always override by editing the
+frontmatter before the task is claimed.
 
 ---
 

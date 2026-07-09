@@ -4,6 +4,8 @@ title: short imperative title
 phase: 0
 area: {{default_area}}             # {{areas_pipe}}
 kind: feature             # feature | chore | milestone | epic | contract
+complexity: standard      # trivial | standard | complex — see "Model routing" in tasks/README.md
+model: sonnet             # haiku | sonnet | opus — Claude model the crew agent should run on
 status: backlog           # backlog | in-progress | in-review | changes-requested | done
 owner:                    # set by claim.sh
 depends_on: []            # e.g. [T-001, T-002] — all must be done before claiming
@@ -35,6 +37,16 @@ Exact commands / UI steps to prove it works end-to-end (not just "tests pass").
 <!-- The claiming agent appends progress notes here (via the main checkout). -->
 
 <!--
+Model routing (set complexity + model together when creating the task):
+- trivial  → haiku  — mechanical work with no design decisions: renames, config tweaks,
+  doc updates, adding a field to an existing pattern, copy changes.
+- standard → sonnet — typical single-area feature/chore with clear acceptance criteria.
+  This is the default when unsure.
+- complex  → opus   — architectural or cross-cutting changes, ambiguous requirements,
+  gnarly debugging, epic decomposition, contract design, security-sensitive work.
+The firstmate passes `model` as the Agent-tool model override when spawning the crew
+agent for this task; the orchestrating session itself stays on the high model.
+
 Dependency tips:
 - Keep depends_on liberal. If B only needs A's *interface* (API shape, schema, file format),
   don't depend on A itself — create a small `kind: contract` task that writes the agreed

@@ -10,6 +10,12 @@
   You spawn crew subagents (in the background, in parallel when tasks are independent),
   monitor them, relay results, and keep the captain informed. You do not implement board
   tasks yourself and you never approve/merge work.
+  **Model routing:** you run on a high model and delegate to the cheapest model that can do
+  the job — read each task's `model:` frontmatter (`haiku`/`sonnet`/`opus`) and pass it as
+  the Agent tool's `model` override when spawning the crew agent for that task. Missing
+  `model:` means `sonnet`. When YOU create tasks (e.g. decomposing an epic), analyse each
+  task's complexity and set `complexity:` + `model:` per the Model routing table in
+  `tasks/README.md`.
 - **Crew** — dev subagents in `.claude/agents/` ({{crew_names}}). Each claims ONE task
   atomically (`tasks/claim.sh`), works only in its worktree (`.worktrees/<id>`), submits
   (`tasks/submit.sh`), and stops.

@@ -16,7 +16,7 @@ for f in "$TASKS_DIR"/phase-*/T-*.md; do
   [ "$(fm "$f" status)" = "backlog" ] || continue
   [ -n "$area_filter" ] && [ "$(fm "$f" area)" != "$area_filter" ] && continue
   if deps_done "$f"; then
-    printf "  %-8s %-10s %s\n" "$(basename "$f" .md)" "$(fm "$f" area)" "$(fm "$f" title)"
+    printf "  %-8s %-10s %-7s %s\n" "$(basename "$f" .md)" "$(fm "$f" area)" "$(task_model "$f")" "$(fm "$f" title)"
     found=1
   fi
 done
@@ -29,7 +29,7 @@ for f in "$TASKS_DIR"/phase-*/T-*.md; do
   [ -e "$f" ] || continue
   [ "$(fm "$f" status)" = "changes-requested" ] || continue
   [ -n "$area_filter" ] && [ "$(fm "$f" area)" != "$area_filter" ] && continue
-  printf "  %-8s %-10s %s (owner: %s)\n" "$(basename "$f" .md)" "$(fm "$f" area)" "$(fm "$f" title)" "$(fm "$f" owner)"
+  printf "  %-8s %-10s %-7s %s (owner: %s)\n" "$(basename "$f" .md)" "$(fm "$f" area)" "$(task_model "$f")" "$(fm "$f" title)" "$(fm "$f" owner)"
   found=1
 done
 [ "$found" -eq 0 ] && echo "  (none)"
