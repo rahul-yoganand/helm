@@ -2,6 +2,7 @@
   "project_name": "Project",
   "areas": ["core", "docs", "infra"],
   "default_area": "core",
+  "max_parallel_agents": 3,
   "personas": [
     {
       "name": "dev",

@@ -2,6 +2,7 @@
   "project_name": "Kestrel",
   "areas": ["backend", "frontend", "fullstack", "infra", "docs"],
   "default_area": "backend",
+  "max_parallel_agents": 2,
   "personas": [
     {
       "name": "backend-dev",

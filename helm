@@ -27,6 +27,13 @@ KIT_VERSION = json.loads((KIT / "kit.json").read_text())["version"]
 MANIFEST_NAME = ".helm-kit.json"
 MARK_BEGIN, MARK_END = "<!-- helm:begin -->", "<!-- helm:end -->"
 
+# Soft cap on concurrent crew subagents the firstmate spawns for a project,
+# absent an explicit "max_parallel_agents" in the preset or a --max-parallel
+# override. Worktrees are isolated and claims are atomic, so nothing breaks
+# above this — it exists to bound cost/context/rate-limit blast radius, not
+# to enforce correctness.
+DEFAULT_MAX_PARALLEL = 3
+
 # Scripts copied byte-for-byte — they self-locate via `git rev-parse --git-common-dir`,
 # so they work in any repo without templating.
 VERBATIM_SCRIPTS = [
@@ -79,6 +86,7 @@ def build_mapping(preset: dict) -> dict[str, str]:
         "safety_context": preset["safety_context"],
         "safety_rules": "\n".join(preset["safety_rules"]),
         "arch_notes": "\n".join(preset["arch_notes"]),
+        "max_parallel_agents": str(preset.get("max_parallel_agents", DEFAULT_MAX_PARALLEL)),
     }
 
 
@@ -181,6 +189,8 @@ def cmd_init(args: argparse.Namespace) -> None:
                                   if (KIT / "presets" / f"{repo.name.lower()}.json").exists()
                                   else "default")
     preset = load_preset(preset_spec)
+    if args.max_parallel is not None:
+        preset["max_parallel_agents"] = args.max_parallel
     outputs = build_outputs(preset)
 
     for rel, (content, execu) in outputs.items():
@@ -267,6 +277,9 @@ def main() -> None:
     p_init = sub.add_parser("init", help="install the kit into a repo")
     p_init.add_argument("repo")
     p_init.add_argument("--preset", help="preset name (kit/presets/*.json) or a JSON path")
+    p_init.add_argument("--max-parallel", type=int, dest="max_parallel",
+                        help=f"cap on concurrent crew subagents the firstmate spawns "
+                             f"(default: preset's max_parallel_agents, or {DEFAULT_MAX_PARALLEL})")
     p_init.add_argument("--force", action="store_true")
     p_init.set_defaults(fn=cmd_init)
     p_up = sub.add_parser("update", help="re-stamp unmodified kit files in a repo")

@@ -33,10 +33,27 @@ commits="$(git -C "$wt" log --oneline "$MAIN_BRANCH..task/$id")"
 [ -n "$commits" ] || die "no commits on task/$id — nothing to submit"
 echo "Commits on task/$id:"; echo "$commits" | sed 's/^/  /'
 
-# If main moved since the claim, ask for a rebase so the merge stays clean.
+# If main moved since the claim, merge it into the task branch now so the PR
+# lands conflict-free. On a conflict, stop here: the calling agent resolves
+# it in the worktree (using judgment — matching model, matching field types,
+# etc. — not a script), commits, and re-runs this script.
 if [ "$(git -C "$ROOT" rev-parse "$MAIN_BRANCH")" != "$(git -C "$wt" merge-base "$MAIN_BRANCH" "task/$id")" ]; then
-  echo "WARNING: $MAIN_BRANCH has moved since this task was claimed."
-  echo "         Rebase before merge:  git -C $wt rebase $MAIN_BRANCH"
+  echo "$MAIN_BRANCH has moved since this task was claimed — merging it into task/$id..."
+  if ! git -C "$wt" merge "$MAIN_BRANCH" --no-edit -q; then
+    echo
+    echo "MERGE CONFLICT merging $MAIN_BRANCH into task/$id:"
+    git -C "$wt" diff --name-only --diff-filter=U | sed 's/^/  /'
+    echo
+    echo "Resolve the conflicts in $wt (remove markers, pick/blend the right content —"
+    echo "check whether the conflicting file was already independently duplicated by"
+    echo "another task; if so the two copies are usually functionally identical and"
+    echo "the choice is cosmetic), then:"
+    echo "  git -C $wt add <resolved files>"
+    echo "  git -C $wt commit --no-edit"
+    echo "  $TASKS_DIR/submit.sh $id $local_mode   # re-run to push/open the PR"
+    exit 1
+  fi
+  echo "merged cleanly."
 fi
 
 review_hint="review locally:  git diff $MAIN_BRANCH...task/$id"

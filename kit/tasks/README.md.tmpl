@@ -79,10 +79,14 @@ frontmatter before the task is claimed.
    branch `task/<id>`. On `CANNOT CLAIM`/`BLOCKED`, pick another. **Never work unclaimed.**
 3. `cd .worktrees/<id>` and implement **only inside the worktree**. Add code comments.
    Commit on the task branch as you go (never on `main`, never push `main`).
-4. If `main` moved meanwhile: `git rebase main` in the worktree before submitting.
-5. `./submit.sh <task-id>` — commits leftovers, pushes, opens the PR (with `gh`), and flips
-   status to `in-review`. Then **stop and report**.
-6. If the human requests changes (status `changes-requested`): resume in the *same* worktree,
+4. `./submit.sh <task-id>` — merges `main` into `task/<id>` if it moved since claim,
+   commits leftovers, pushes, opens the PR (with `gh`), and flips status to `in-review`.
+   If the merge conflicts, it stops and prints the conflicted files instead of pushing —
+   resolve them in the worktree (judgment call: check whether the file was independently
+   duplicated by another task first; if so the two copies are usually functionally
+   identical), `git add`/`git commit`, then re-run `./submit.sh <task-id>`. Then **stop
+   and report**.
+5. If the human requests changes (status `changes-requested`): resume in the *same* worktree,
    fix, and `./submit.sh` again — it updates the same PR.
 
 Token tip: if `graphify-out/` exists at the repo root, query the knowledge graph (graphify
@@ -117,7 +121,11 @@ Ways to run them:
    act as and which area to take.
 
 Because claims are atomic and worktrees are isolated, any number of agents can run
-concurrently; `depends_on` keeps truly dependent work sequential.
+concurrently; `depends_on` keeps truly dependent work sequential. The firstmate defaults to
+at most **{{max_parallel_agents}}** crew subagents at once for this project (a cost/context
+preference set at `helm init` time — see `max_parallel_agents` in `.helm-kit.json`, or
+`helm init --max-parallel N`), queuing the rest and backfilling as agents finish. Ask the
+firstmate to raise or lower it for a session if you want more or less parallelism.
 
 ## Scripts
 
