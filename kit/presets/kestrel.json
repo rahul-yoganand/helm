@@ -3,6 +3,18 @@
   "areas": ["backend", "frontend", "fullstack", "infra", "docs"],
   "default_area": "backend",
   "max_parallel_agents": 2,
+  "auto_merge": {
+    "enabled": false,
+    "max_risk": "low",
+    "deny_globs": [
+      "backend/app/storage/",
+      "backend/app/engines/",
+      "backend/alembic/",
+      "backend/.env",
+      "backend/requirements.txt",
+      "frontend/pubspec.yaml"
+    ]
+  },
   "personas": [
     {
       "name": "backend-dev",

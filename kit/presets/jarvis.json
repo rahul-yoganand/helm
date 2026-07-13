@@ -3,6 +3,21 @@
   "areas": ["core", "voice", "db", "docs", "infra"],
   "default_area": "core",
   "max_parallel_agents": 3,
+  "auto_merge": {
+    "enabled": false,
+    "max_risk": "low",
+    "deny_globs": [
+      "migrations/",
+      "jarvis_core/db/",
+      "jarvis_core/audio.py",
+      "jarvis_core/stt.py",
+      "jarvis_core/llm.py",
+      ".env",
+      "pyproject.toml",
+      "setup.py",
+      "setup.cfg"
+    ]
+  },
   "personas": [
     {
       "name": "python-dev",

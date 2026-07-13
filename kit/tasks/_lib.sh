@@ -89,3 +89,97 @@ board_commit() {
   _board_unlock
   trap - EXIT
 }
+
+# --- Finalize + auto-merge helpers -----------------------------------------
+# Shared by approve.sh (captain) and auto-approve.sh (firstmate, low-risk only).
+
+# Mark a task done, tear down its worktree + branch, and snapshot the board.
+# Assumes the branch has already been merged into MAIN_BRANCH by the caller.
+# Usage: finalize_done <id> <task-file> <branch> <board-message>
+finalize_done() {
+  local id="$1" f="$2" branch="$3" msg="$4"
+  sed_i "$f" \
+    -e "s/^status:.*/status: done/" \
+    -e "s/^approved_at:.*/approved_at: $(now)/"
+  # Force-delete is safe: the work is merged. Cleanup failures never fail the finalize.
+  git -C "$ROOT" worktree remove "$WORKTREES/$id" 2>/dev/null || git -C "$ROOT" worktree remove --force "$WORKTREES/$id" 2>/dev/null || true
+  git -C "$ROOT" branch -D "$branch" >/dev/null 2>&1 || true
+  has_origin && git -C "$ROOT" push origin --delete "$branch" 2>/dev/null || true
+  board_commit "$msg"
+}
+
+# Read a value from .helm-kit.json. Looks under the inlined `preset` block first,
+# then the manifest root. Prints "true"/"false" for booleans, newline-joined items
+# for lists, the raw value otherwise, or nothing if absent. Usage:
+#   helm_kit_get <section> <key>   e.g. helm_kit_get auto_merge enabled
+helm_kit_get() {
+  local manifest="$ROOT/.helm-kit.json"
+  [ -f "$manifest" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  python3 - "$manifest" "$1" "$2" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+sec, key = sys.argv[2], sys.argv[3]
+node = None
+for base in (d.get("preset", {}), d):
+    if isinstance(base, dict) and isinstance(base.get(sec), dict) and key in base[sec]:
+        node = base[sec][key]
+        break
+if node is None:
+    sys.exit(0)
+if isinstance(node, bool):
+    print("true" if node else "false")
+elif isinstance(node, list):
+    print("\n".join(str(x) for x in node))
+else:
+    print(node)
+PY
+}
+
+# True if <file> matches <glob>. A glob ending in "/" is a directory prefix;
+# otherwise it matches the exact path or any path beginning with it.
+_glob_match() {
+  local f="$1" g="$2"
+  case "$g" in
+    */) case "$f" in "$g"*) return 0 ;; esac ;;
+    *)  [ "$f" = "$g" ] && return 0; case "$f" in "$g"*) return 0 ;; esac ;;
+  esac
+  return 1
+}
+
+# Print any files in the diff (merge-base(MAIN,branch)..branch) that fall in a
+# NEVER-auto-merge deny-list. Empty output => the diff is clear to auto-merge.
+# Two lists: the universal CONTROL PLANE (hardcoded here so it cannot be softened
+# per-project) and the project's high-blast-radius globs from .helm-kit.json's
+# auto_merge.deny_globs. Usage: denied_paths <branch>
+denied_paths() {
+  local branch="$1" base files f g
+  base="$(git -C "$ROOT" merge-base "$MAIN_BRANCH" "$branch" 2>/dev/null || echo "$MAIN_BRANCH")"
+  files="$(git -C "$ROOT" diff --name-only "$base".."$branch" 2>/dev/null || true)"
+  [ -n "$files" ] || return 0
+  # Control plane: the workflow's own machinery. Editing any of it — the scripts,
+  # the reviewer/firstmate/crew instructions, the hooks, the kit manifest — always
+  # goes to the captain, so Claude can never rewrite the rules via an auto-merge.
+  local control="tasks/
+.claude/
+CLAUDE.md
+AGENTS.md
+.helm-kit.json"
+  local project; project="$(helm_kit_get auto_merge deny_globs)"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    while IFS= read -r g; do
+      [ -n "$g" ] || continue
+      _glob_match "$f" "$g" && { echo "$f"; break; }
+    done <<EOF
+$control
+$project
+EOF
+  done <<EOF
+$files
+EOF
+  return 0  # the trailing `read` hits EOF (status 1); callers use `set -e`, so normalize.
+}

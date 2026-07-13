@@ -49,9 +49,30 @@ EOF
 id="$(printf '%s' "$cmd" | grep -oE 'T-[0-9]+' | head -1 || true)"
 target="${id:-the current branch vs main}"
 
+# If the captain has enabled auto-merge, add the low-risk fast-path directive.
+auto_line=""
+manifest="${CLAUDE_PROJECT_DIR:-.}/.helm-kit.json"
+if [ -f "$manifest" ] && command -v python3 >/dev/null 2>&1; then
+  enabled="$(python3 - "$manifest" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+for b in (d.get("preset", {}), d):
+    am = b.get("auto_merge") if isinstance(b, dict) else None
+    if isinstance(am, dict) and am.get("enabled") is True:
+        print("true"); break
+PY
+)"
+  if [ "$enabled" = "true" ]; then
+    auto_line=" Auto-merge is ON: if the verdict is APPROVE or APPROVE WITH NITS AND the reviewer rates RISK low, run tasks/auto-approve.sh ${id:-the-task-id} low to merge and finalize; for any other verdict or risk tier, route to the captain for approve.sh."
+  fi
+fi
+
 # Reason text is fed verbatim to Claude. Keep it free of " and \ so the JSON stays valid
 # without an escaper (no external dependency for the output path).
-msg="Task ${target} was just submitted for review. Before it goes to human PR approval, run the no-mistakes gate now: invoke the reviewer subagent (subagent_type reviewer) on ${target}, or run the /no-mistakes skill. Relay its verdict; if it is BLOCK or CHANGES REQUESTED, surface the findings and treat the task as NOT done until they are addressed."
+msg="Task ${target} was just submitted for review. Before it goes to human PR approval, run the no-mistakes gate now: invoke the reviewer subagent (subagent_type reviewer) on ${target}, or run the /no-mistakes skill. Relay its verdict; if it is BLOCK or CHANGES REQUESTED, surface the findings and treat the task as NOT done until they are addressed.${auto_line}"
 
 printf '{"decision":"block","reason":"%s"}\n' "$msg"
 exit 0

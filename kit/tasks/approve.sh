@@ -37,16 +37,7 @@ else
   git -C "$ROOT" merge --no-ff "$branch" -m "Merge $branch: $(fm "$f" title)"
 fi
 
-sed_i "$f" \
-  -e "s/^status:.*/status: done/" \
-  -e "s/^approved_at:.*/approved_at: $(now)/"
-
-# Clean up the worktree and branch (force-delete is safe: the work is merged).
-git -C "$ROOT" worktree remove "$WORKTREES/$id" 2>/dev/null || git -C "$ROOT" worktree remove --force "$WORKTREES/$id" 2>/dev/null || true
-git -C "$ROOT" branch -D "$branch" >/dev/null
-has_origin && git -C "$ROOT" push origin --delete "$branch" 2>/dev/null || true
-
-# Snapshot the board state on main (includes any accumulated status flips).
-board_commit "[board] $id approved → done"
+# Flip status → done, tear down the worktree/branch, snapshot the board.
+finalize_done "$id" "$f" "$branch" "[board] $id approved → done"
 
 echo "APPROVED $id → done. Dependent tasks are now unblocked (./next.sh)."

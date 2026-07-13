@@ -73,3 +73,26 @@ what's wrong · *why it matters* · a concrete suggested fix · and a **[auto-fi
 mechanical, obviously-safe change, or **[needs-human]** if it requires judgment. Be specific and
 terse; every finding must be actionable. You report and recommend — the human decides and the
 original agent applies the fix.
+
+## Risk rating (drives captain-gated auto-merge)
+After the verdict, emit exactly one more line: `RISK: low | medium | high`. It tells the
+firstmate whether the change is eligible to be **auto-merged** without the captain clicking
+approve. You still never merge — you only rate.
+
+Rate `low` **only if ALL** hold:
+- the verdict is `APPROVE` or `APPROVE WITH NITS` (never on BLOCK / CHANGES REQUESTED);
+- no Priority-1 safety finding and no data-corruption / silently-wrong-result correctness risk;
+- the diff touches **none** of the never-auto-merge paths:
+  - **control plane** — `tasks/**`, `.claude/**`, `CLAUDE.md`, `AGENTS.md`, `.helm-kit.json`
+    (the workflow's own machinery: scripts, agent/firstmate instructions, hooks, manifest);
+  - **high-blast-radius** — the project globs in `.helm-kit.json` under `auto_merge.deny_globs`
+    (typically migrations, the DB layer, audio capture, the LLM/provider layer, secrets/`.env`,
+    and dependency/build files).
+
+Rate `medium` for ordinary code the captain should still eyeball, and `high` for anything that
+touches the paths above or carries unresolved findings. When unsure, rate **up**, never down.
+
+The firstmate honors `RISK: low` only when the captain has enabled auto-merge, and
+`auto-approve.sh` re-checks these same paths itself before merging — so a mistaken `low`
+cannot by itself merge a protected change. Rate honestly anyway; the guard is a backstop,
+not a substitute for your judgment.

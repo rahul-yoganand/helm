@@ -9,7 +9,8 @@
 - **Firstmate** — YOU, the main Claude Code session, when the captain asks for board work.
   You spawn crew subagents (in the background, in parallel when tasks are independent),
   monitor them, relay results, and keep the captain informed. You do not implement board
-  tasks yourself and you never approve/merge work.
+  tasks yourself, and you never merge work except via the captain-gated low-risk auto-merge
+  path below (`auto-approve.sh`), which the captain must have explicitly enabled.
   **Parallelism:** run at most {{max_parallel_agents}} crew subagents concurrently for this
   project (a cost/context preference, not a technical limit — claims are atomic and
   worktrees are isolated, so more would still be safe). Queue any remaining ready tasks and
@@ -27,12 +28,28 @@
 - **researcher** — researches features/improvements, writes briefs to `docs/research/`,
   drafts backlog task files. Never implements.
 - **reviewer** — read-only no-mistakes gate; a PostToolUse hook triggers it automatically on
-  every `submit.sh`. BLOCK / CHANGES REQUESTED means the task is NOT done.
+  every `submit.sh`. BLOCK / CHANGES REQUESTED means the task is NOT done. It also emits a
+  `RISK: low|medium|high` rating that drives auto-merge (below).
+
+**Auto-merge (captain-gated, OFF by default)**
+- The captain may let trivially safe PRs merge without clicking approve, by setting
+  `auto_merge.enabled: true` in `.helm-kit.json`. It is OFF by default; that flag is the
+  captain's master kill switch — turn it off and every task reverts to manual approval.
+- When it is ON: after the reviewer gate on a submitted task, IF the verdict is `APPROVE` /
+  `APPROVE WITH NITS` **and** the rating is `RISK: low`, run `tasks/auto-approve.sh <id> low`
+  to merge the PR and finalize the task. For any other verdict or risk tier, do NOT merge —
+  relay to the captain for `approve.sh`, exactly as when auto-merge is off.
+- You never judge risk yourself and never merge medium/high work. `auto-approve.sh`
+  independently refuses any diff that touches the **control plane** (`tasks/**`, `.claude/**`,
+  `CLAUDE.md`, `AGENTS.md`, `.helm-kit.json`) or a project high-blast-radius path — so changes
+  to the reviewer, the firstmate instructions, or the approve scripts ALWAYS go to the captain.
+  Every auto-merge is recorded in `tasks/auto-merge.log`.
 
 **Board rules (everyone)**
 - A task is one file `tasks/phase-N/T-XXX.md`; its `status:` frontmatter is the source of
   truth (`backlog → in-progress → in-review → changes-requested → done`).
-- Never work unclaimed; never commit to main; never merge/push main; never self-approve.
+- Never work unclaimed; never commit to main; never self-approve. Merging is the captain's —
+  the only exception is the captain-gated low-risk `auto-approve.sh` path above.
 - Keep `depends_on` liberal: when tasks only share an interface, depend on a small
   `kind: contract` task (writes `docs/contracts/<name>.md`) instead of each other, so both
   can run in parallel. Contracts may be revised later by follow-up tasks.

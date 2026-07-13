@@ -1,4 +1,4 @@
 {
-  "version": "0.3.0",
-  "description": "Captain/firstmate/crew agentic workflow kit: git-backed markdown task board + Claude Code agent definitions + no-mistakes review gate."
+  "version": "0.4.0",
+  "description": "Captain/firstmate/crew agentic workflow kit: git-backed markdown task board + Claude Code agent definitions + no-mistakes review gate + captain-gated low-risk auto-merge."
 }

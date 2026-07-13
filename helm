@@ -37,7 +37,7 @@ DEFAULT_MAX_PARALLEL = 3
 # Scripts copied byte-for-byte — they self-locate via `git rev-parse --git-common-dir`,
 # so they work in any repo without templating.
 VERBATIM_SCRIPTS = [
-    "_lib.sh", "claim.sh", "submit.sh", "approve.sh",
+    "_lib.sh", "claim.sh", "submit.sh", "approve.sh", "auto-approve.sh",
     "reject.sh", "unclaim.sh", "next.sh", "board.sh",
 ]
 

@@ -2,7 +2,9 @@
 
 A file-based work queue for autonomous agents. One agent takes one task, implements it in an
 **isolated git worktree**, opens a **PR**, and stops. Nothing merges until *you* (the captain)
-approve. Independent tasks run **in parallel** — each claim gets its own branch + worktree.
+approve — unless you opt into **captain-gated auto-merge** for low-risk changes (off by
+default; see below). Independent tasks run **in parallel** — each claim gets its own branch +
+worktree.
 
 Roles: **captain** = the human (approves/rejects), **firstmate** = the main Claude Code
 session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claude/agents/`,
@@ -102,6 +104,26 @@ skill) to orient yourself before reading many files — it is far cheaper than b
   appended to the task file; owner and worktree are kept (NOT sent to backlog).
 - Stuck/abandoned claim: `./unclaim.sh <id> [--force]`.
 
+## Auto-merge (optional, captain-gated, OFF by default)
+
+To stop hand-approving trivially safe PRs, the captain can let the firstmate merge them
+automatically. It stays fully manual until you opt in.
+
+- **Enable / disable (your kill switch):** set `auto_merge.enabled` to `true`/`false` in
+  `.helm-kit.json`. While off, nothing changes.
+- **How it decides:** the reviewer gate emits a `RISK: low|medium|high` rating. When enabled,
+  the firstmate runs `./auto-approve.sh <id> low` only for an `APPROVE`/`APPROVE WITH NITS`
+  verdict rated `low`; everything else still routes to you.
+- **The hard guard (can't be talked around):** `auto-approve.sh` re-scans the diff itself and
+  **refuses** — routing to you — if it touches either deny-list, regardless of the rating:
+  - **control plane** — `tasks/**`, `.claude/**`, `CLAUDE.md`, `AGENTS.md`, `.helm-kit.json`
+    (the workflow's own scripts, agent/firstmate instructions, hooks, and manifest). So Claude
+    can never rewrite the rules — or the approve scripts, or the reviewer — via an auto-merge.
+  - **high-blast-radius** — the project globs in `auto_merge.deny_globs` (e.g. migrations, the
+    DB layer, audio capture, the LLM/provider layer, `.env`, dependency/build files).
+- **Audit trail:** every auto-merge appends a line to `tasks/auto-merge.log` (committed with
+  the board) so you can review what merged without you.
+
 ## Running crew in parallel
 
 Crew definitions live in `.claude/agents/`:
@@ -136,6 +158,7 @@ firstmate to raise or lower it for a session if you want more or less parallelis
 | `claim.sh <id> <agent>` | agent | atomic claim → branch + worktree |
 | `submit.sh <id> [--local]` | agent | commit, push, open PR, → in-review |
 | `approve.sh <id> [--local]` | human | after PR merge: sync main, cleanup, → done |
+| `auto-approve.sh <id> <risk> [--local]` | firstmate | low-risk fast path: merge + finalize, only when `auto_merge.enabled` and the diff clears the deny-lists |
 | `reject.sh <id> "reason"` | human | → changes-requested (owner keeps task) |
 | `unclaim.sh <id> [--force]` | either | abandon a claim → backlog |
 

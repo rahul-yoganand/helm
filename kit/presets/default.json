@@ -3,6 +3,19 @@
   "areas": ["core", "docs", "infra"],
   "default_area": "core",
   "max_parallel_agents": 3,
+  "auto_merge": {
+    "enabled": false,
+    "max_risk": "low",
+    "deny_globs": [
+      "migrations/",
+      ".env",
+      "pyproject.toml",
+      "setup.py",
+      "setup.cfg",
+      "package.json",
+      "requirements.txt"
+    ]
+  },
   "personas": [
     {
       "name": "dev",
