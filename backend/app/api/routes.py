@@ -43,10 +43,14 @@ def get_board(proj: str) -> dict:
 def get_task(proj: str, task_id: str) -> dict:
     repo = registry.resolve(proj)
     t = board.detail(repo, task_id)
+    # Feature tasks share worktree .worktrees/feat-<slug> + branch feat/<slug>.
+    feat = t.get("feature") or ""
+    wt_key = f"feat-{feat}" if feat else task_id
+    branch = f"feat/{feat}" if feat else f"task/{task_id}"
     wts = {w["task_id"]: w for w in gitinfo.worktrees(repo)}
-    t["worktree"] = wts.get(task_id)
+    t["worktree"] = wts.get(wt_key)
     # PR lookup only here (never in the board list): gh is slow.
-    t["pr"] = gitinfo.pr_status(repo, task_id, settings.pr_cache_ttl) \
+    t["pr"] = gitinfo.pr_status(repo, task_id, settings.pr_cache_ttl, branch=branch) \
         if t.get("status") in ("in-review", "changes-requested") else None
     return t
 

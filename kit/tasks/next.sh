@@ -16,7 +16,8 @@ for f in "$TASKS_DIR"/phase-*/T-*.md; do
   [ "$(fm "$f" status)" = "backlog" ] || continue
   [ -n "$area_filter" ] && [ "$(fm "$f" area)" != "$area_filter" ] && continue
   if deps_done "$f"; then
-    printf "  %-8s %-10s %-7s %s\n" "$(basename "$f" .md)" "$(fm "$f" area)" "$(task_model "$f")" "$(fm "$f" title)"
+    feat="$(task_feature "$f")"
+    printf "  %-8s %-10s %-7s %s%s\n" "$(basename "$f" .md)" "$(fm "$f" area)" "$(task_model "$f")" "$(fm "$f" title)" "${feat:+  [feature: $feat — shared worktree, ONE PR]}"
     found=1
   fi
 done

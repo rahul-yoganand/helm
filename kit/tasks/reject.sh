@@ -13,11 +13,26 @@ reason="${2:-no reason given}"
 f="$(find_task "$id")"
 [ -n "$f" ] || die "unknown task: $id"
 [ "$(fm "$f" status)" = "in-review" ] || die "cannot reject: $id has status '$(fm "$f" status)' (expected in-review)"
+feat="$(task_feature "$f")"
 
-sed_i "$f" -e "s/^status:.*/status: changes-requested/"
-printf '\n- CHANGES REQUESTED %s: %s\n' "$(now)" "$reason" >> "$f"
+# Rejecting a feature task rejects the feature's single PR: every in-review
+# sibling goes back to changes-requested with the owner and worktree intact.
+files="$f"; ids="$id"
+if [ -n "$feat" ]; then
+  files=""; ids=""
+  for sf in $(feature_files "$feat"); do
+    [ "$(fm "$sf" status)" = "in-review" ] || continue
+    files="$files $sf"; ids="$ids$(basename "$sf" .md) "
+  done
+  ids="${ids% }"
+fi
 
-board_commit "[board] $id → changes-requested"
+for sf in $files; do
+  sed_i "$sf" -e "s/^status:.*/status: changes-requested/"
+  printf '\n- CHANGES REQUESTED %s: %s\n' "$(now)" "$reason" >> "$sf"
+done
 
-echo "CHANGES REQUESTED on $id (owner: $(fm "$f" owner) keeps the task)."
-echo "Agent: resume in $WORKTREES/$id, address the feedback, then re-run $TASKS_DIR/submit.sh $id"
+board_commit "[board] $ids → changes-requested"
+
+echo "CHANGES REQUESTED on $ids (owner: $(fm "$f" owner) keeps the work)."
+echo "Agent: resume in $(task_wt "$f"), address the feedback, then re-run $TASKS_DIR/submit.sh $id"

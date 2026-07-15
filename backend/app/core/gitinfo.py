@@ -46,12 +46,14 @@ def activity(repo: Path, limit: int = 50) -> list[dict]:
 _pr_cache: dict[tuple[str, str], tuple[float, dict | None]] = {}
 
 
-def pr_status(repo: Path, task_id: str, ttl: float) -> dict | None:
-    key = (str(repo), task_id)
+def pr_status(repo: Path, task_id: str, ttl: float, branch: str | None = None) -> dict | None:
+    # Feature tasks share one PR on feat/<slug>; standalone tasks use task/<id>.
+    branch = branch or f"task/{task_id}"
+    key = (str(repo), branch)
     hit = _pr_cache.get(key)
     if hit and time.monotonic() - hit[0] < ttl:
         return hit[1]
-    out = _run(["gh", "pr", "view", f"task/{task_id}", "--json", "state,url,title"],
+    out = _run(["gh", "pr", "view", branch, "--json", "state,url,title"],
                repo, timeout=8)
     pr = None
     if out:

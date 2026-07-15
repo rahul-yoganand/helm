@@ -25,6 +25,10 @@ You have two modes; pick from what was asked (default: Mode A, then offer Mode B
 2. Draft one task file per unit of work into the right `tasks/phase-N/` folder:
    `status: backlog`, correct `area`/`kind`, liberal `depends_on`, and a `## Research` section
    linking your brief. Big items become `kind: epic` (to be decomposed, never implemented).
+   **Group by feature:** give every task belonging to the same user-facing feature the same
+   `feature: <kebab-slug>` frontmatter — the crew works them all in one shared worktree
+   (up to 3 agents) and the feature lands as ONE complete PR. Leave `feature:` empty only for genuinely
+   standalone tasks (one-off chores, contracts, epics).
 3. For each task, analyse its complexity and set `complexity:` + `model:` per the Model
    routing table in `tasks/README.md`: `trivial → haiku`, `standard → sonnet` (default),
    `complex → opus`. Vague acceptance criteria or work spanning many files bumps it up a tier.

@@ -28,8 +28,15 @@ defer() { echo "AUTO-MERGE DECLINED for $id: $* — route to the captain (approv
 f="$(find_task "$id")"
 [ -n "$f" ] || die "unknown task: $id"
 [ "$(fm "$f" status)" = "in-review" ] || die "cannot auto-approve: $id has status '$(fm "$f" status)' (expected in-review)"
-branch="task/$id"
+feat="$(task_feature "$f")"
+branch="$(task_branch "$f")"
 git -C "$ROOT" rev-parse --verify -q "$branch" >/dev/null || die "branch $branch not found"
+
+# A feature merges as one PR: every in-review sibling finalizes together.
+done_ids="$id"
+if [ -n "$feat" ]; then
+  done_ids="$(feature_ids_in "$feat" in-review)"; done_ids="${done_ids% }"
+fi
 
 # The hard guard: never auto-merge a diff that touches the control plane or a
 # high-blast-radius path, regardless of the risk tier passed in.
@@ -54,10 +61,10 @@ fi
 # Supervision trail: one committed line per auto-merge so the captain can audit
 # everything that merged without them. Lives under tasks/ so board_commit snapshots it.
 merge_sha="$(git -C "$ROOT" rev-parse --short "$MAIN_BRANCH")"
-printf '%s\t%s\trisk=%s\t%s\t%s\n' "$(now)" "$id" "$risk" "$merge_sha" "$(fm "$f" title)" >> "$TASKS_DIR/auto-merge.log"
+printf '%s\t%s\trisk=%s\t%s\t%s\n' "$(now)" "$done_ids" "$risk" "$merge_sha" "$(fm "$f" title)" >> "$TASKS_DIR/auto-merge.log"
 
 # Flip status → done, tear down the worktree/branch, snapshot the board (+ the log).
-finalize_done "$id" "$f" "$branch" "[board] $id auto-merged (risk=$risk) → done"
+finalize_done "$id" "$f" "$branch" "[board] $done_ids auto-merged (risk=$risk) → done"
 
-echo "AUTO-MERGED $id → done (risk=$risk). Logged to tasks/auto-merge.log."
+echo "AUTO-MERGED $done_ids → done (risk=$risk). Logged to tasks/auto-merge.log."
 echo "Dependent tasks may now be unblocked (./next.sh)."

@@ -34,14 +34,68 @@ find_task() { ls "$TASKS_DIR"/phase-*/"$1".md 2>/dev/null | head -1 || true; }
 # model routing existed have no field — default to sonnet, the standard tier.
 task_model() { local m; m=$(fm "$1" model); echo "${m:-sonnet}"; }
 
-# All depends_on tasks must have status: done.
+# --- Feature grouping --------------------------------------------------------
+# Tasks that share `feature: <slug>` frontmatter are ONE unit of review:
+# up to 3 crew agents (firstmate-coordinated) work them in a shared worktree on
+# branch feat/<slug> and they ship together as ONE PR. A task with no/empty
+# `feature:` is standalone and keeps the classic task/<id> branch + worktree.
+
+task_feature() { fm "$1" feature; }
+
+# Branch a task's work lives on: feat/<slug> for feature tasks, task/<id> otherwise.
+task_branch() {
+  local s; s="$(task_feature "$1")"
+  if [ -n "$s" ]; then echo "feat/$s"; else echo "task/$(basename "$1" .md)"; fi
+}
+
+# Worktree a task is worked in: shared .worktrees/feat-<slug> for feature tasks.
+task_wt() {
+  local s; s="$(task_feature "$1")"
+  if [ -n "$s" ]; then echo "$WORKTREES/feat-$s"; else echo "$WORKTREES/$(basename "$1" .md)"; fi
+}
+
+# All task files carrying feature: <slug> (any status), one path per line.
+feature_files() {
+  grep -l "^feature:[[:space:]]*$1[[:space:]]*\$" "$TASKS_DIR"/phase-*/T-*.md 2>/dev/null || true
+}
+
+# Distinct agents currently working a feature (owners of claimed, not-done
+# tasks), one per line. Used to enforce the per-feature crew cap in claim.sh.
+feature_owners() {
+  local slug="$1" sf
+  for sf in $(feature_files "$slug"); do
+    case "$(fm "$sf" status)" in backlog|done) continue ;; esac
+    fm "$sf" owner
+  done | sort -u | grep -v '^$' || true
+}
+
+# Space-separated ids of a feature's tasks currently in <status>.
+feature_ids_in() {
+  local slug="$1" st="$2" sf
+  for sf in $(feature_files "$slug"); do
+    [ "$(fm "$sf" status)" = "$st" ] && printf '%s ' "$(basename "$sf" .md)"
+  done
+  return 0
+}
+
+# All depends_on tasks must have status: done — EXCEPT deps inside the same
+# feature: those are worked in the shared feature worktree under the
+# firstmate's sequencing, so an in-progress same-feature dep does not block
+# claiming the next task (it must at least be claimed, i.e. not backlog —
+# the firstmate spawns dependent tasks only after their deps are implemented).
 deps_done() {
-  local deps d df
+  local deps d df myfeat
+  myfeat="$(task_feature "$1")"
   deps=$(fm "$1" depends_on | tr -d '[]' | tr ',' ' ')
   for d in $deps; do
     d=$(echo "$d" | xargs); [ -z "$d" ] && continue
     df=$(find_task "$d"); [ -n "$df" ] || return 1
-    [ "$(fm "$df" status)" = "done" ] || return 1
+    [ "$(fm "$df" status)" = "done" ] && continue
+    if [ -n "$myfeat" ] && [ "$(task_feature "$df")" = "$myfeat" ] \
+       && [ "$(fm "$df" status)" != "backlog" ]; then
+      continue
+    fi
+    return 1
   done
   return 0
 }
@@ -95,14 +149,27 @@ board_commit() {
 
 # Mark a task done, tear down its worktree + branch, and snapshot the board.
 # Assumes the branch has already been merged into MAIN_BRANCH by the caller.
+# Feature-aware: for a feature task, EVERY in-review sibling shipped in the same
+# PR, so all of them flip to done together and the shared worktree goes with them.
 # Usage: finalize_done <id> <task-file> <branch> <board-message>
 finalize_done() {
-  local id="$1" f="$2" branch="$3" msg="$4"
-  sed_i "$f" \
-    -e "s/^status:.*/status: done/" \
-    -e "s/^approved_at:.*/approved_at: $(now)/"
+  local id="$1" f="$2" branch="$3" msg="$4" wt sf feat
+  wt="$(task_wt "$f")"
+  feat="$(task_feature "$f")"
+  local files="$f"
+  if [ -n "$feat" ]; then
+    files=""
+    for sf in $(feature_files "$feat"); do
+      [ "$(fm "$sf" status)" = "in-review" ] && files="$files $sf"
+    done
+  fi
+  for sf in $files; do
+    sed_i "$sf" \
+      -e "s/^status:.*/status: done/" \
+      -e "s/^approved_at:.*/approved_at: $(now)/"
+  done
   # Force-delete is safe: the work is merged. Cleanup failures never fail the finalize.
-  git -C "$ROOT" worktree remove "$WORKTREES/$id" 2>/dev/null || git -C "$ROOT" worktree remove --force "$WORKTREES/$id" 2>/dev/null || true
+  git -C "$ROOT" worktree remove "$wt" 2>/dev/null || git -C "$ROOT" worktree remove --force "$wt" 2>/dev/null || true
   git -C "$ROOT" branch -D "$branch" >/dev/null 2>&1 || true
   has_origin && git -C "$ROOT" push origin --delete "$branch" 2>/dev/null || true
   board_commit "$msg"

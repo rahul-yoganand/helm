@@ -15,8 +15,16 @@ mode="${2:-}"
 f="$(find_task "$id")"
 [ -n "$f" ] || die "unknown task: $id"
 [ "$(fm "$f" status)" = "in-review" ] || die "cannot approve: $id has status '$(fm "$f" status)' (expected in-review)"
-branch="task/$id"
+feat="$(task_feature "$f")"
+branch="$(task_branch "$f")"
 git -C "$ROOT" rev-parse --verify -q "$branch" >/dev/null || die "branch $branch not found"
+
+# Approving any task of a feature approves the feature's single PR — every
+# in-review sibling flips to done together (they shipped in the same diff).
+done_ids="$id"
+if [ -n "$feat" ]; then
+  done_ids="$(feature_ids_in "$feat" in-review)"; done_ids="${done_ids% }"
+fi
 
 if [ "$mode" != "--local" ] && has_origin; then
   git -C "$ROOT" fetch origin
@@ -38,6 +46,6 @@ else
 fi
 
 # Flip status → done, tear down the worktree/branch, snapshot the board.
-finalize_done "$id" "$f" "$branch" "[board] $id approved → done"
+finalize_done "$id" "$f" "$branch" "[board] $done_ids approved → done"
 
-echo "APPROVED $id → done. Dependent tasks are now unblocked (./next.sh)."
+echo "APPROVED $done_ids → done. Dependent tasks are now unblocked (./next.sh)."

@@ -1,7 +1,8 @@
 # {{project_name}} — Agentic Task Board (worktree + PR edition)
 
-A file-based work queue for autonomous agents. One agent takes one task, implements it in an
-**isolated git worktree**, opens a **PR**, and stops. Nothing merges until *you* (the captain)
+A file-based work queue for autonomous agents. One agent takes one unit of work — a
+standalone task, or a whole **feature** (tasks sharing `feature: <slug>`) — implements it in
+an **isolated git worktree**, opens **ONE PR**, and stops. Nothing merges until *you* (the captain)
 approve — unless you opt into **captain-gated auto-merge** for low-risk changes (off by
 default; see below). Independent tasks run **in parallel** — each claim gets its own branch +
 worktree.
@@ -29,6 +30,16 @@ session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claud
    B on A. Create a small `kind: contract` task that writes the agreed interface (API shape,
    schema, file format) to `docs/contracts/<name>.md`; both A and B depend on the contract,
    run in parallel, and a later task may revise the contract if reality disagrees.
+6. **Features ship as ONE PR.** Inside a phase, tasks are grouped by feature: every task of
+   a user-facing feature carries the same `feature: <slug>` frontmatter. the feature is worked in
+   ONE shared worktree (`.worktrees/feat-<slug>`, branch `feat/<slug>`) — up to 3 crew
+   agents may share it (each on its own tasks/files, coordinated by the firstmate) — and
+   it is submitted ONCE when the whole feature is implemented: one complete, reviewable
+   PR per feature instead of a fragmented PR per task. Within-feature `depends_on` orders
+   the tasks; it doesn't block claiming the next one in the same worktree (the firstmate
+   sequences dependent tasks). Approve/reject/unclaim on any task of a feature applies to the whole feature.
+   Tasks with an empty `feature:` stay standalone (`task/<id>` branch, own PR) — use that
+   only for one-off chores, contracts, and epics.
 
 ## Classification
 
@@ -37,6 +48,7 @@ session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claud
 | `phase` (+ folder) | 0–N | build order |
 | `area` | {{areas_table}} | routes tasks to the right crew member (`./next.sh --area <area>`) |
 | `kind` | `feature` `chore` `milestone` `epic` `contract` | epics are decomposed, never implemented directly; contracts pin interfaces |
+| `feature` | kebab-slug or empty | groups a phase's tasks into one feature = one agent + one worktree + ONE PR (core idea 6) |
 | `complexity` | `trivial` `standard` `complex` | effort estimate set at task creation; drives `model` |
 | `model` | `haiku` `sonnet` `opus` | Claude model the crew agent runs on (see Model routing) |
 | `depends_on` | task ids | a task is claimable only when all deps are `done` |
@@ -78,16 +90,24 @@ frontmatter before the task is claimed.
 
 1. `./next.sh [--area <area>]` — see what's claimable (or resumable).
 2. `./claim.sh <task-id> <your-agent-id>` — atomic claim; creates `.worktrees/<id>` on
-   branch `task/<id>`. On `CANNOT CLAIM`/`BLOCKED`, pick another. **Never work unclaimed.**
-3. `cd .worktrees/<id>` and implement **only inside the worktree**. Add code comments.
-   Commit on the task branch as you go (never on `main`, never push `main`).
-4. `./submit.sh <task-id>` — merges `main` into `task/<id>` if it moved since claim,
+   branch `task/<id>`, or — for a `feature:` task — creates/reuses the shared
+   `.worktrees/feat-<slug>` on branch `feat/<slug>`. On `CANNOT CLAIM`/`BLOCKED`, pick
+   another. **Never work unclaimed.**
+   **Feature tasks:** the feature's tasks all live in its shared worktree (up to 3 crew
+   may work there — stay on your own task's files). Claim each task with `claim.sh` before
+   starting it, implement in the shared worktree, and only submit (step 4) after the
+   feature's LAST task is implemented — whoever finishes last submits.
+3. `cd` into the worktree and implement **only inside the worktree**. Add code comments.
+   Commit on the work branch as you go (never on `main`, never push `main`).
+4. `./submit.sh <task-id>` — merges `main` into the work branch if it moved since claim,
    commits leftovers, pushes, opens the PR (with `gh`), and flips status to `in-review`.
    If the merge conflicts, it stops and prints the conflicted files instead of pushing —
    resolve them in the worktree (judgment call: check whether the file was independently
    duplicated by another task first; if so the two copies are usually functionally
    identical), `git add`/`git commit`, then re-run `./submit.sh <task-id>`. Then **stop
-   and report**.
+   and report**. For a feature, `submit.sh` refuses while any of the feature's tasks is
+   still in backlog, and otherwise flips ALL of them to in-review and opens ONE PR for
+   the complete feature.
 5. If the human requests changes (status `changes-requested`): resume in the *same* worktree,
    fix, and `./submit.sh` again — it updates the same PR.
 
@@ -96,12 +116,15 @@ skill) to orient yourself before reading many files — it is far cheaper than b
 
 ## Human (captain) protocol
 
-- Review the PR on GitHub (or `git diff main...task/<id>` locally).
+- Review the PR on GitHub (or `git diff main...task/<id>` / `main...feat/<slug>` locally).
 - **Approve path:** approve & merge the PR on GitHub, then `./approve.sh <id>` — verifies the
   merge, fast-forwards main, flips status to `done`, removes worktree + branch, commits the
   board state. (No remote / offline: `./approve.sh <id> --local` reviews-then-merges locally.)
+  For a feature PR, pass any one of its task ids — every in-review task of the feature
+  finalizes together.
 - **Reject path:** `./reject.sh <id> "what to fix"` — status → `changes-requested`, reason
-  appended to the task file; owner and worktree are kept (NOT sent to backlog).
+  appended to the task file; owner and worktree are kept (NOT sent to backlog). On a feature,
+  all in-review siblings move back together and the owner resumes in the shared worktree.
 - Stuck/abandoned claim: `./unclaim.sh <id> [--force]`.
 
 ## Auto-merge (optional, captain-gated, OFF by default)
@@ -143,7 +166,10 @@ Ways to run them:
    act as and which area to take.
 
 Because claims are atomic and worktrees are isolated, any number of agents can run
-concurrently; `depends_on` keeps truly dependent work sequential. The firstmate defaults to
+concurrently; `depends_on` keeps truly dependent work sequential. Features add a second
+axis: a feature's tasks are worked in its ONE shared worktree by up to 3 crew agents (each
+on its own tasks/files — `claim.sh` refuses a 4th agent), the firstmate sequences
+within-feature dependencies, and the feature ships as ONE PR when complete. The firstmate defaults to
 at most **{{max_parallel_agents}}** crew subagents at once for this project (a cost/context
 preference set at `helm init` time — see `max_parallel_agents` in `.helm-kit.json`, or
 `helm init --max-parallel N`), queuing the rest and backfilling as agents finish. Ask the
@@ -155,12 +181,12 @@ firstmate to raise or lower it for a session if you want more or less parallelis
 |---|---|---|
 | `next.sh [--area X]` | agent | claimable + resumable tasks |
 | `board.sh` | anyone | full board grouped by status |
-| `claim.sh <id> <agent>` | agent | atomic claim → branch + worktree |
-| `submit.sh <id> [--local]` | agent | commit, push, open PR, → in-review |
-| `approve.sh <id> [--local]` | human | after PR merge: sync main, cleanup, → done |
+| `claim.sh <id> <agent>` | agent | atomic claim → branch + worktree (feature tasks share `feat/<slug>`) |
+| `submit.sh <id> [--local]` | agent | commit, push, open PR, → in-review (whole feature: one PR) |
+| `approve.sh <id> [--local]` | human | after PR merge: sync main, cleanup, → done (whole feature) |
 | `auto-approve.sh <id> <risk> [--local]` | firstmate | low-risk fast path: merge + finalize, only when `auto_merge.enabled` and the diff clears the deny-lists |
-| `reject.sh <id> "reason"` | human | → changes-requested (owner keeps task) |
-| `unclaim.sh <id> [--force]` | either | abandon a claim → backlog |
+| `reject.sh <id> "reason"` | human | → changes-requested (owner keeps task; whole feature) |
+| `unclaim.sh <id> [--force]` | either | abandon a claim → backlog (whole feature) |
 
 > **GitHub note:** with a configured `origin` remote and the GitHub CLI (`brew install gh &&
 > gh auth login`), `submit.sh` opens PRs automatically. Without them, use `--local` mode:
