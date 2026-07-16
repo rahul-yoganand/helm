@@ -1,8 +1,9 @@
 # {{project_name}} — Agentic Task Board (worktree + PR edition)
 
-A file-based work queue for autonomous agents. One agent takes one unit of work — a
-standalone task, or a whole **feature** (tasks sharing `feature: <slug>`) — implements it in
-an **isolated git worktree**, opens **ONE PR**, and stops. Nothing merges until *you* (the captain)
+A file-based work queue for autonomous agents. Every phase is a set of **features**
+(folders), every feature a set of tasks. One agent takes one unit of work — one or more
+tasks of a single feature — implements it in an **isolated git worktree**, and stops; the
+complete feature ships as **ONE PR**. Nothing merges until *you* (the captain)
 approve — unless you opt into **captain-gated auto-merge** for low-risk changes (off by
 default; see below). Independent tasks run **in parallel** — each claim gets its own branch +
 worktree.
@@ -15,7 +16,8 @@ session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claud
 
 ## Core ideas
 
-1. **A task is ONE file that never moves.** `tasks/phase-N/T-XXX.md`, with `status:` in its
+1. **A task is ONE file that never moves.** `tasks/phase-N/<feature-slug>/T-XXX.md` —
+   a phase contains feature folders, a feature folder contains tasks — with `status:` in its
    frontmatter as the single source of truth:
    `backlog → in-progress → in-review → changes-requested → done` (blocked is computed from deps).
 2. **Claiming is atomic via git.** `claim.sh` creates branch `task/<id>` — git ref creation is
@@ -30,28 +32,51 @@ session (spawns crew, monitors, relays), **crew** = the dev subagents in `.claud
    B on A. Create a small `kind: contract` task that writes the agreed interface (API shape,
    schema, file format) to `docs/contracts/<name>.md`; both A and B depend on the contract,
    run in parallel, and a later task may revise the contract if reality disagrees.
-6. **Features ship as ONE PR.** Inside a phase, tasks are grouped by feature: every task of
-   a user-facing feature carries the same `feature: <slug>` frontmatter. the feature is worked in
-   ONE shared worktree (`.worktrees/feat-<slug>`, branch `feat/<slug>`) — up to 3 crew
-   agents may share it (each on its own tasks/files, coordinated by the firstmate) — and
-   it is submitted ONCE when the whole feature is implemented: one complete, reviewable
-   PR per feature instead of a fragmented PR per task. Within-feature `depends_on` orders
-   the tasks; it doesn't block claiming the next one in the same worktree (the firstmate
-   sequences dependent tasks). Approve/reject/unclaim on any task of a feature applies to the whole feature.
-   Tasks with an empty `feature:` stay standalone (`task/<id>` branch, own PR) — use that
-   only for one-off chores, contracts, and epics.
+6. **Features ship as ONE PR — and grouping is a real folder, not a tag.** Inside a phase,
+   put every task belonging to the same user-facing feature in the SAME FOLDER:
+   `tasks/phase-N/<feature-slug>/T-XXX.md`. The folder name IS the feature slug — there is
+   no field to keep in sync; a task's location is its feature. The feature is worked in ONE
+   shared worktree (`.worktrees/feat-<slug>`, branch `feat/<slug>`) — up to 3 crew agents
+   may share it (each on its own tasks/files, coordinated by the firstmate) — and it is
+   submitted ONCE when the whole feature is implemented: one complete, reviewable PR per
+   feature instead of a fragmented PR per task. Within-feature `depends_on` orders the
+   tasks; it doesn't block claiming the next one in the same worktree (the firstmate
+   sequences dependent tasks). Approve/reject/unclaim on any task of a feature applies to
+   the whole feature. EVERY task lives in a feature folder — one-off chores, contracts,
+   and epics get their own small (even single-task) feature folder rather than sitting
+   directly in `tasks/phase-N/`.
+7. **Phases are capped at 5 features.** A phase is a build-order bucket of feature
+   folders and nothing else. Create the next `tasks/phase-(N+1)/` only once the current
+   phase already holds 5 feature folders.
+
+## Folder layout
+
+```
+tasks/phase-N/               # a phase = up to 5 feature folders, nothing else
+├── <feature-slug>/          # e.g. tasks-ui-v3 — the folder name IS the feature
+│   ├── T-011.md
+│   └── T-012.md
+└── <another-feature>/       # even a one-off chore/contract/epic gets its own folder
+    └── T-013.md
+```
+
+> Legacy note: task files created directly in `tasks/phase-N/` before this rule keep
+> working (own `task/<id>` branch + PR), but NEW tasks are never created outside a
+> feature folder.
 
 ## Classification
 
 | Field | Values | Purpose |
 |---|---|---|
-| `phase` (+ folder) | 0–N | build order |
+| `phase` (+ folder) | 0–N | build order (a phase holds at most 5 features) |
 | `area` | {{areas_table}} | routes tasks to the right crew member (`./next.sh --area <area>`) |
 | `kind` | `feature` `chore` `milestone` `epic` `contract` | epics are decomposed, never implemented directly; contracts pin interfaces |
-| `feature` | kebab-slug or empty | groups a phase's tasks into one feature = one agent + one worktree + ONE PR (core idea 6) |
 | `complexity` | `trivial` `standard` `complex` | effort estimate set at task creation; drives `model` |
 | `model` | `haiku` `sonnet` `opus` | Claude model the crew agent runs on (see Model routing) |
 | `depends_on` | task ids | a task is claimable only when all deps are `done` |
+
+Feature membership is NOT a frontmatter field — it's the task file's folder (see Folder
+layout above and core idea 6).
 
 ## Model routing
 
@@ -89,11 +114,11 @@ frontmatter before the task is claimed.
 ## Agent protocol (follow exactly)
 
 1. `./next.sh [--area <area>]` — see what's claimable (or resumable).
-2. `./claim.sh <task-id> <your-agent-id>` — atomic claim; creates `.worktrees/<id>` on
-   branch `task/<id>`, or — for a `feature:` task — creates/reuses the shared
-   `.worktrees/feat-<slug>` on branch `feat/<slug>`. On `CANNOT CLAIM`/`BLOCKED`, pick
-   another. **Never work unclaimed.**
-   **Feature tasks:** the feature's tasks all live in its shared worktree (up to 3 crew
+2. `./claim.sh <task-id> <your-agent-id>` — atomic claim; creates/reuses the feature's
+   shared `.worktrees/feat-<slug>` on branch `feat/<slug>` (a legacy task sitting directly
+   in `tasks/phase-N/` still gets its own `.worktrees/<id>` on `task/<id>`). On
+   `CANNOT CLAIM`/`BLOCKED`, pick another. **Never work unclaimed.**
+   The feature's tasks all live in its shared worktree (up to 3 crew
    may work there — stay on your own task's files). Claim each task with `claim.sh` before
    starting it, implement in the shared worktree, and only submit (step 4) after the
    feature's LAST task is implemented — whoever finishes last submits.

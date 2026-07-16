@@ -27,20 +27,42 @@ fm() { grep -m1 "^$2:" "$1" 2>/dev/null | sed "s/^$2:[[:space:]]*//" || true; }
 # Portable in-place sed (works with both GNU and BSD sed).
 sed_i() { local f="$1"; shift; local t; t="$(mktemp)"; sed "$@" "$f" >"$t" && mv "$t" "$f"; }
 
-# Locate a task file by id across all phase dirs.
-find_task() { ls "$TASKS_DIR"/phase-*/"$1".md 2>/dev/null | head -1 || true; }
+# Locate a task file by id, searching each phase dir recursively (a task lives
+# in phase-N/<feature-slug>/; directly in phase-N/ is legacy-standalone only —
+# every NEW task belongs to a feature folder).
+find_task() { find "$TASKS_DIR"/phase-* -name "$1.md" 2>/dev/null | head -1 || true; }
+
+# Every task file across every phase, one path per line, stable order.
+all_task_files() { find "$TASKS_DIR"/phase-* -name 'T-*.md' 2>/dev/null | sort; }
 
 # Claude model a task should run on (model: frontmatter). Tasks created before
 # model routing existed have no field — default to sonnet, the standard tier.
 task_model() { local m; m=$(fm "$1" model); echo "${m:-sonnet}"; }
 
 # --- Feature grouping --------------------------------------------------------
-# Tasks that share `feature: <slug>` frontmatter are ONE unit of review:
-# up to 3 crew agents (firstmate-coordinated) work them in a shared worktree on
-# branch feat/<slug> and they ship together as ONE PR. A task with no/empty
-# `feature:` is standalone and keeps the classic task/<id> branch + worktree.
+# Feature grouping is STRUCTURAL, not a frontmatter tag: a task placed at
+# tasks/phase-N/<feature-slug>/T-XXX.md belongs to feature <feature-slug>; a
+# task placed directly at tasks/phase-N/T-XXX.md is standalone (legacy only —
+# new tasks always live in a feature folder). Tasks in the
+# same feature folder are ONE unit of review: up to 3 crew agents
+# (firstmate-coordinated) work them in a shared worktree on branch
+# feat/<slug> and they ship together as ONE PR.
 
-task_feature() { fm "$1" feature; }
+# Directory holding a feature's task files, or "" if the task is standalone
+# (i.e. its parent directory IS a phase-N/ folder, not a feature subfolder).
+task_feature_dir() {
+  local dir; dir="$(cd "$(dirname "$1")" && pwd)"
+  case "$(basename "$dir")" in
+    phase-*) echo "" ;;
+    *) echo "$dir" ;;
+  esac
+}
+
+# Feature slug (= folder name) for a task, or "" if standalone.
+task_feature() {
+  local dir; dir="$(task_feature_dir "$1")"
+  [ -n "$dir" ] && basename "$dir" || echo ""
+}
 
 # Branch a task's work lives on: feat/<slug> for feature tasks, task/<id> otherwise.
 task_branch() {
@@ -54,16 +76,19 @@ task_wt() {
   if [ -n "$s" ]; then echo "$WORKTREES/feat-$s"; else echo "$WORKTREES/$(basename "$1" .md)"; fi
 }
 
-# All task files carrying feature: <slug> (any status), one path per line.
+# All task files in a feature's folder (any status), one path per line.
+# Usage: feature_files <feature-dir>  (from task_feature_dir; "" -> nothing).
 feature_files() {
-  grep -l "^feature:[[:space:]]*$1[[:space:]]*\$" "$TASKS_DIR"/phase-*/T-*.md 2>/dev/null || true
+  local dir="$1"
+  [ -n "$dir" ] || return 0
+  find "$dir" -maxdepth 1 -name 'T-*.md' 2>/dev/null | sort
 }
 
 # Distinct agents currently working a feature (owners of claimed, not-done
 # tasks), one per line. Used to enforce the per-feature crew cap in claim.sh.
 feature_owners() {
-  local slug="$1" sf
-  for sf in $(feature_files "$slug"); do
+  local dir="$1" sf
+  for sf in $(feature_files "$dir"); do
     case "$(fm "$sf" status)" in backlog|done) continue ;; esac
     fm "$sf" owner
   done | sort -u | grep -v '^$' || true
@@ -71,8 +96,8 @@ feature_owners() {
 
 # Space-separated ids of a feature's tasks currently in <status>.
 feature_ids_in() {
-  local slug="$1" st="$2" sf
-  for sf in $(feature_files "$slug"); do
+  local dir="$1" st="$2" sf
+  for sf in $(feature_files "$dir"); do
     [ "$(fm "$sf" status)" = "$st" ] && printf '%s ' "$(basename "$sf" .md)"
   done
   return 0
@@ -153,13 +178,13 @@ board_commit() {
 # PR, so all of them flip to done together and the shared worktree goes with them.
 # Usage: finalize_done <id> <task-file> <branch> <board-message>
 finalize_done() {
-  local id="$1" f="$2" branch="$3" msg="$4" wt sf feat
+  local id="$1" f="$2" branch="$3" msg="$4" wt sf featdir
   wt="$(task_wt "$f")"
-  feat="$(task_feature "$f")"
+  featdir="$(task_feature_dir "$f")"
   local files="$f"
-  if [ -n "$feat" ]; then
+  if [ -n "$featdir" ]; then
     files=""
-    for sf in $(feature_files "$feat"); do
+    for sf in $(feature_files "$featdir"); do
       [ "$(fm "$sf" status)" = "in-review" ] && files="$files $sf"
     done
   fi

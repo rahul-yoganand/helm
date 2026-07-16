@@ -11,29 +11,29 @@
   monitor them, relay results, and keep the captain informed. You do not implement board
   tasks yourself, and you never merge work except via the captain-gated low-risk auto-merge
   path below (`auto-approve.sh`), which the captain must have explicitly enabled.
-  **Parallelism:** schedule by FEATURE (tasks sharing `feature: <slug>`) and standalone
-  task. A feature's tasks share one worktree and up to 3 crew agents may work it at once
-  (each on its own tasks; you sequence within-feature `depends_on` by spawn order).
+  **Parallelism:** schedule by FEATURE (a folder of tasks, `tasks/phase-N/<slug>/`).
+  A feature's tasks share one worktree and up to 3 crew agents may work it
+  at once (each on its own tasks; you sequence within-feature `depends_on` by spawn order).
   Run at most {{max_parallel_agents}} crew subagents concurrently for this project (a
   cost/context preference, not a technical limit — claims are atomic and worktrees are
-  isolated, so more would still be safe). Queue the remaining ready features/tasks and spawn
+  isolated, so more would still be safe). Queue the remaining ready features and spawn
   the next one as a slot frees up. The captain can raise or lower this for a session by just
   saying so.
   **Model routing:** you run on a high model and delegate to the cheapest model that can do
   the job — read each task's `model:` frontmatter (`haiku`/`sonnet`/`opus`) and pass it as
   the Agent tool's `model` override when spawning the crew agent for that task; for a
   feature, use the highest `model:` among its tasks. Missing `model:` means `sonnet`. When
-  YOU create tasks (e.g. decomposing an epic), group them by feature — every task of the
-  same user-facing feature gets the same `feature: <slug>` frontmatter inside its phase, so
-  the feature lands as ONE complete PR — and analyse each task's complexity to set
-  `complexity:` + `model:` per the Model routing table in `tasks/README.md`.
+  YOU create tasks (e.g. decomposing an epic), group them by feature — put every task of the
+  same user-facing feature in the same folder, `tasks/phase-N/<slug>/`, so the feature lands
+  as ONE complete PR — and analyse each task's complexity to set `complexity:` + `model:`
+  per the Model routing table in `tasks/README.md`.
 - **Crew** — dev subagents in `.claude/agents/` ({{crew_names}}). Each takes ONE unit of
-  work: a standalone task (own worktree `.worktrees/<id>`, own PR) or one-or-more tasks of a
-  **feature** — tasks sharing a `feature: <slug>` frontmatter, worked in the shared worktree
-  `.worktrees/feat-<slug>` (max 3 crew per feature; `claim.sh` enforces it) and submitted
-  ONCE (`tasks/submit.sh`, by whoever implements the feature's last task) as ONE complete
-  PR. Claims are atomic (`tasks/claim.sh`, per task); the agent stops after submitting its
-  claimed work.
+  work: one-or-more tasks of a single **feature** — tasks living in the same
+  `tasks/phase-N/<slug>/` folder, worked in the
+  shared worktree `.worktrees/feat-<slug>` (max 3 crew per feature; `claim.sh` enforces it)
+  and submitted ONCE (`tasks/submit.sh`, by whoever implements the feature's last task) as
+  ONE complete PR. Claims are atomic (`tasks/claim.sh`, per task); the agent stops after
+  submitting its claimed work.
 - **researcher** — researches features/improvements, writes briefs to `docs/research/`,
   drafts backlog task files. Never implements.
 - **reviewer** — read-only no-mistakes gate; a PostToolUse hook triggers it automatically on
@@ -55,12 +55,17 @@
   Every auto-merge is recorded in `tasks/auto-merge.log`.
 
 **Board rules (everyone)**
-- A task is one file `tasks/phase-N/T-XXX.md`; its `status:` frontmatter is the source of
-  truth (`backlog → in-progress → in-review → changes-requested → done`).
-- Inside a phase, tasks are grouped by feature (`feature: <slug>`): one shared worktree,
+- The hierarchy is strict: a PHASE contains FEATURES (folders), a FEATURE contains TASKS.
+  A task is one file `tasks/phase-N/<feature-slug>/T-XXX.md`; its `status:` frontmatter is
+  the source of truth (`backlog → in-progress → in-review → changes-requested → done`).
+- EVERY task lives inside a feature folder — grouping is the FOLDER, not a field: all tasks
+  of a user-facing feature share one `tasks/phase-N/<slug>/` folder — one shared worktree,
   max 3 crew working it, ONE final PR for the complete feature — never a PR per task. The
-  reviewer gate and captain approval apply to the feature PR exactly as before. Leave
-  `feature:` empty only for genuinely standalone work (one-off chores, contracts, epics).
+  reviewer gate and captain approval apply to the feature PR exactly as before. One-off
+  chores, contracts, and epics get their own small (even single-task) feature folder — no
+  new task file ever sits directly in `tasks/phase-N/`.
+- A phase holds at most 5 features. Add a new `tasks/phase-(N+1)/` only once the current
+  phase already has 5 feature folders.
 - Never work unclaimed; never commit to main; never self-approve. Merging is the captain's —
   the only exception is the captain-gated low-risk `auto-approve.sh` path above.
 - Keep `depends_on` liberal: when tasks only share an interface, depend on a small

@@ -4,7 +4,6 @@ title: short imperative title
 phase: 0
 area: {{default_area}}             # {{areas_pipe}}
 kind: feature             # feature | chore | milestone | epic | contract
-feature:                  # optional kebab-slug — tasks sharing it are ONE feature: one shared worktree (feat/<slug>), max 3 crew, ONE final PR
 complexity: standard      # trivial | standard | complex — see "Model routing" in tasks/README.md
 model: sonnet             # haiku | sonnet | opus — Claude model the crew agent should run on
 status: backlog           # backlog | in-progress | in-review | changes-requested | done
@@ -49,13 +48,18 @@ Model routing (set complexity + model together when creating the task):
 The firstmate passes `model` as the Agent-tool model override when spawning the crew
 agent for this task; the orchestrating session itself stays on the high model.
 
-Feature grouping (set when creating tasks inside a phase):
-- Give every task that belongs to the same user-facing feature the same `feature: <slug>`.
-  The feature is worked in the shared `feat/<slug>` worktree (up to 3 crew agents, each on
-  its own tasks) and submitted ONCE — one complete PR per feature instead of a PR per task.
-  Within-feature `depends_on` orders the tasks without blocking the shared claim (the
-  firstmate sequences dependent tasks). Leave `feature:` empty only for genuinely
-  standalone tasks (one-off chores, contracts, epics).
+Feature grouping (set when creating tasks inside a phase) — STRUCTURAL, not a field:
+- Put every task that belongs to the same user-facing feature in the SAME FOLDER:
+  tasks/phase-N/<kebab-slug>/T-XXX.md. The folder name IS the feature slug — there is no
+  `feature:` frontmatter field to keep in sync. mkdir the folder, then create its task
+  files inside it. The feature is worked in the shared `feat/<slug>` worktree (up to 3 crew
+  agents, each on its own tasks) and submitted ONCE — one complete PR per feature instead
+  of a PR per task. Within-feature `depends_on` orders the tasks without blocking the
+  shared claim (the firstmate sequences dependent tasks).
+- EVERY task lives inside a feature folder — never directly in tasks/phase-N/. One-off
+  chores, contracts, and epics get their own small (even single-task) feature folder.
+- A phase holds at most 5 features: create tasks in a new tasks/phase-(N+1)/ only once
+  the current phase already has 5 feature folders.
 
 Dependency tips:
 - Keep depends_on liberal. If B only needs A's *interface* (API shape, schema, file format),
