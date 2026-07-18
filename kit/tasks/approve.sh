@@ -16,6 +16,7 @@ f="$(find_task "$id")"
 [ -n "$f" ] || die "unknown task: $id"
 [ "$(fm "$f" status)" = "in-review" ] || die "cannot approve: $id has status '$(fm "$f" status)' (expected in-review)"
 feat="$(task_feature "$f")"
+featdir="$(task_feature_dir "$f")"
 branch="$(task_branch "$f")"
 git -C "$ROOT" rev-parse --verify -q "$branch" >/dev/null || die "branch $branch not found"
 
@@ -23,7 +24,7 @@ git -C "$ROOT" rev-parse --verify -q "$branch" >/dev/null || die "branch $branch
 # in-review sibling flips to done together (they shipped in the same diff).
 done_ids="$id"
 if [ -n "$feat" ]; then
-  done_ids="$(feature_ids_in "$feat" in-review)"; done_ids="${done_ids% }"
+  done_ids="$(feature_ids_in "$featdir" in-review)"; done_ids="${done_ids% }"
 fi
 
 if [ "$mode" != "--local" ] && has_origin; then

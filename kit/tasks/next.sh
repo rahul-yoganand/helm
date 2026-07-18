@@ -11,7 +11,7 @@ if [ "${1:-}" = "--area" ]; then area_filter="${2:?usage: next.sh [--area <area>
 
 echo "READY to claim:"
 found=0
-for f in "$TASKS_DIR"/phase-*/T-*.md; do
+for f in $(all_task_files); do
   [ -e "$f" ] || continue
   [ "$(fm "$f" status)" = "backlog" ] || continue
   [ -n "$area_filter" ] && [ "$(fm "$f" area)" != "$area_filter" ] && continue
@@ -26,7 +26,7 @@ done
 echo
 echo "RESUME (changes requested — owner continues in existing worktree):"
 found=0
-for f in "$TASKS_DIR"/phase-*/T-*.md; do
+for f in $(all_task_files); do
   [ -e "$f" ] || continue
   [ "$(fm "$f" status)" = "changes-requested" ] || continue
   [ -n "$area_filter" ] && [ "$(fm "$f" area)" != "$area_filter" ] && continue

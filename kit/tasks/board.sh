@@ -7,7 +7,7 @@ source "$(dirname "$0")/_lib.sh"
 for st in backlog in-progress in-review changes-requested done; do
   printf "\n=== %s ===\n" "$st"
   n=0
-  for f in "$TASKS_DIR"/phase-*/T-*.md; do
+  for f in $(all_task_files); do
     [ -e "$f" ] || continue
     [ "$(fm "$f" status)" = "$st" ] || continue
     id="$(basename "$f" .md)"

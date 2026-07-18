@@ -35,7 +35,20 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def task_files(repo: Path) -> list[Path]:
-    return sorted((repo / "tasks").glob("phase-*/T-*.md"))
+    # "**" matches zero or more directories, so this covers both a standalone
+    # task (phase-N/T-XXX.md) and a feature task (phase-N/<slug>/T-XXX.md).
+    return sorted((repo / "tasks").glob("phase-*/**/T-*.md"))
+
+
+def phase_and_feature(f: Path) -> tuple[str, str]:
+    """Feature grouping is structural, not a frontmatter field: a task at
+    phase-N/<slug>/T-XXX.md belongs to feature <slug>; phase-N/T-XXX.md is
+    standalone. Returns (phase_dir_name, feature_slug_or_empty).
+    """
+    parent = f.parent
+    if parent.name.startswith("phase-"):
+        return parent.name, ""
+    return parent.parent.name, parent.name
 
 
 def scan(repo: Path) -> list[dict]:
@@ -44,7 +57,7 @@ def scan(repo: Path) -> list[dict]:
     for f in task_files(repo):
         fields, _ = parse_frontmatter(f.read_text())
         fields["id"] = fields.get("id") or f.stem
-        fields["phase_dir"] = f.parent.name
+        fields["phase_dir"], fields["feature"] = phase_and_feature(f)
         tasks.append(fields)
     done = {t["id"] for t in tasks if t.get("status") == "done"}
     known = {t["id"] for t in tasks}
@@ -61,7 +74,7 @@ def detail(repo: Path, task_id: str) -> dict:
         if f.stem == task_id:
             fields, body = parse_frontmatter(f.read_text())
             fields["id"] = fields.get("id") or task_id
-            fields["phase_dir"] = f.parent.name
+            fields["phase_dir"], fields["feature"] = phase_and_feature(f)
             # The "## Agent log" section is where owners append progress notes.
             log = ""
             if "## Agent log" in body:

@@ -13,6 +13,7 @@ local_mode="${2:-}"
 f="$(find_task "$id")"
 [ -n "$f" ] || die "unknown task: $id"
 feat="$(task_feature "$f")"
+featdir="$(task_feature_dir "$f")"
 branch="$(task_branch "$f")"
 wt="$(task_wt "$f")"
 [ -d "$wt" ] || die "no worktree for $id — claim it first (./claim.sh $id <agent>)"
@@ -29,10 +30,10 @@ title="$(fm "$f" title)"
 # All of the feature's claimed tasks go to in-review together below.
 submit_files="$f"
 if [ -n "$feat" ]; then
-  remaining="$(feature_ids_in "$feat" backlog)"
+  remaining="$(feature_ids_in "$featdir" backlog)"
   [ -z "$remaining" ] || die "feature '$feat' is incomplete — still in backlog: ${remaining}(claim and implement them in $wt first; a feature opens ONE PR when whole)"
   submit_files=""
-  for sf in $(feature_files "$feat"); do
+  for sf in $(feature_files "$featdir"); do
     case "$(fm "$sf" status)" in
       in-progress|changes-requested) submit_files="$submit_files $sf" ;;
     esac
@@ -94,10 +95,21 @@ review_hint="review locally:  git diff $MAIN_BRANCH...$branch"
 if [ "$local_mode" != "--local" ] && has_origin; then
   git -C "$wt" push -u origin "$branch"
   if has_gh; then
-    pr_url="$( (cd "$wt" && gh pr create --base "$MAIN_BRANCH" --head "$branch" \
-      --title "$pr_title" \
-      --body "$pr_body") )"
-    review_hint="PR opened: $pr_url"
+    # A feature branch may already have an open PR from an earlier partial
+    # submit (more tasks were added to the feature folder after the first
+    # batch went in-review). Update that PR in place instead of re-creating
+    # one — `gh pr create` errors when a PR already exists for the branch.
+    existing_pr="$( (cd "$wt" && gh pr view "$branch" --json url -q .url) 2>/dev/null || true)"
+    if [ -n "$existing_pr" ]; then
+      (cd "$wt" && gh pr edit "$branch" --title "$pr_title" --body "$pr_body") >/dev/null
+      pr_url="$existing_pr"
+      review_hint="PR updated: $pr_url"
+    else
+      pr_url="$( (cd "$wt" && gh pr create --base "$MAIN_BRANCH" --head "$branch" \
+        --title "$pr_title" \
+        --body "$pr_body") )"
+      review_hint="PR opened: $pr_url"
+    fi
   else
     # Derive the web URL from origin (handles both git@ and https remotes) so the
     # printed link is clickable even without the gh CLI.

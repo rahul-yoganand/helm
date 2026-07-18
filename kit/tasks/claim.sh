@@ -18,6 +18,7 @@ st="$(fm "$f" status)"
 deps_done "$f" || die "BLOCKED: $id has unmet dependencies — pick another (./next.sh)"
 
 feat="$(task_feature "$f")"
+featdir="$(task_feature_dir "$f")"
 branch="$(task_branch "$f")"
 wt="$(task_wt "$f")"
 
@@ -27,7 +28,7 @@ if [ -n "$feat" ] && git -C "$ROOT" rev-parse --verify -q "$branch" >/dev/null; 
   # task joins a feature already being worked. Up to 3 crew agents may share a
   # feature's worktree (they should stay on disjoint files — within-feature
   # depends_on ordering is the firstmate's job); a 4th agent is refused.
-  owners="$(feature_owners "$feat")"
+  owners="$(feature_owners "$featdir")"
   if ! printf '%s\n' "$owners" | grep -qx "$agent"; then
     n="$(printf '%s\n' "$owners" | grep -c . || true)"
     [ "$n" -lt 3 ] || die "CANNOT CLAIM: feature '$feat' already has 3 agents ($(echo $owners | tr '\n' ' ')) — the per-feature crew cap"
@@ -64,7 +65,7 @@ FEATURE '$feat': all of this feature's tasks are worked HERE (up to 3 crew may
 share this worktree — stay on your task's files). Claim each task with
 $TASKS_DIR/claim.sh before starting it. Submit ONCE — after the feature's LAST
 task is implemented — with: $TASKS_DIR/submit.sh $id   (one PR for the whole feature)
-Remaining tasks in this feature (backlog): $(feature_ids_in "$feat" backlog)
+Remaining tasks in this feature (backlog): $(feature_ids_in "$featdir" backlog)
 EOF
 else
   echo "When done: $TASKS_DIR/submit.sh $id"

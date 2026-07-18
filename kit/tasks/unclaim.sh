@@ -18,6 +18,7 @@ case "$st" in
 esac
 
 feat="$(task_feature "$f")"
+featdir="$(task_feature_dir "$f")"
 branch="$(task_branch "$f")"
 if git -C "$ROOT" rev-parse --verify -q "$branch" >/dev/null; then
   if [ -n "$(git -C "$ROOT" log --oneline "$MAIN_BRANCH..$branch" 2>/dev/null)" ] && [ "$force" != "--force" ]; then
@@ -33,7 +34,7 @@ fi
 files="$f"; ids="$id"
 if [ -n "$feat" ]; then
   files=""; ids=""
-  for sf in $(feature_files "$feat"); do
+  for sf in $(feature_files "$featdir"); do
     case "$(fm "$sf" status)" in backlog|done) continue ;; esac
     files="$files $sf"; ids="$ids$(basename "$sf" .md) "
   done

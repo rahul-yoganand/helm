@@ -14,13 +14,14 @@ f="$(find_task "$id")"
 [ -n "$f" ] || die "unknown task: $id"
 [ "$(fm "$f" status)" = "in-review" ] || die "cannot reject: $id has status '$(fm "$f" status)' (expected in-review)"
 feat="$(task_feature "$f")"
+featdir="$(task_feature_dir "$f")"
 
 # Rejecting a feature task rejects the feature's single PR: every in-review
 # sibling goes back to changes-requested with the owner and worktree intact.
 files="$f"; ids="$id"
 if [ -n "$feat" ]; then
   files=""; ids=""
-  for sf in $(feature_files "$feat"); do
+  for sf in $(feature_files "$featdir"); do
     [ "$(fm "$sf" status)" = "in-review" ] || continue
     files="$files $sf"; ids="$ids$(basename "$sf" .md) "
   done
